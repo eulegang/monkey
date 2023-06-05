@@ -77,26 +77,26 @@ pub const Lexer = struct {
         };
     }
 
-    fn filename(self: *@This()) ?[]const u8 {
+    pub fn filename(self: *@This()) ?[]const u8 {
         return self.name;
     }
 
-    fn lineno(self: *@This()) usize {
+    pub fn lineno(self: *@This()) usize {
         return self.line;
     }
 
-    fn resolve(self: *@This(), s: Span) []const u8 {
+    pub fn resolve(self: *@This(), s: Span) []const u8 {
         return self.content[s.start..s.end];
     }
 
-    fn span(self: *@This()) Span {
+    pub fn span(self: *@This()) Span {
         return Span{
             .start = self.pos,
             .end = self.hare,
         };
     }
 
-    fn slice(self: *@This()) []const u8 {
+    pub fn slice(self: *@This()) []const u8 {
         return self.content[self.pos..self.hare];
     }
 
