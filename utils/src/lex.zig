@@ -25,8 +25,17 @@ pub fn main() !void {
         try stdout.print("\x1b[34m|- \x1b[33m{s}\x1b[0m\n", .{line});
         var lexer = lang.Lexer.init(line, null);
 
-        while (try lexer.sig()) |token| {
-            try stdout.print("\x1b[36m <\x1b[0m {} \x1b[35m\"{s}\"\x1b[0m\n", .{ token, lexer.slice() });
+        while (true) {
+            if (lexer.sig()) |mtoken| {
+                if (mtoken) |token| {
+                    try stdout.print("\x1b[36m <\x1b[0m {} \x1b[35m\"{s}\"\x1b[0m\n", .{ token, lexer.slice() });
+                } else {
+                    break;
+                }
+            } else |_| {
+                try stdout.print("\x1b[31m^^^\x1b[0mInvalid character: \x1b[31m{s}\x1b[0m\n", .{lexer.current_char()});
+                break;
+            }
         }
 
         try stdout.print("\x1b[1m\x1b[32m>>>\x1b[0m ", .{});

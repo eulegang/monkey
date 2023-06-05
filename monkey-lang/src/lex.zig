@@ -1,62 +1,62 @@
 pub const std = @import("std");
 
-pub const Token = enum {
-    ident,
-
-    // Insignificants
-    comment,
-    space,
-
-    // keyword / symbols
-    let, // let
-    assign,
-    semicolon,
-    comma,
-    function, // fn
-    cond, // if
-    contra, // else
-    loop, // loop
-    loop_cond, // while
-    ret, // return
-
-    // Values
-    int,
-    string,
-    true,
-    false,
-
-    // Operators
-    bang,
-    plus,
-    minus,
-    star,
-    slash,
-
-    // Combo operators
-    eq, // ==
-    neq, // !=
-    ge, // <=
-    le, // >=
-
-    // Contexts
-    lparen,
-    rparen,
-    lcurly,
-    rcurly,
-    lbracket,
-    rbracket,
-    langle,
-    rangle,
-};
-
-pub const Error = error{InvalidChar};
-
-pub const Span = struct {
-    start: usize,
-    end: usize,
-};
-
 pub const Lexer = struct {
+    pub const Span = struct {
+        start: usize,
+        end: usize,
+    };
+
+    pub const Error = error{InvalidChar};
+
+    pub const Token = enum {
+        ident,
+
+        // Insignificants
+        comment,
+        space,
+
+        // keyword / symbols
+        let, // let
+        assign,
+        semicolon,
+        comma,
+        function, // fn
+        cond, // if
+        contra, // else
+        loop, // loop
+        loop_cond, // while
+        ret, // return
+
+        // Values
+        int,
+        string,
+        true,
+        false,
+
+        // Operators
+        bang,
+        plus,
+        minus,
+        star,
+        slash,
+
+        // Combo operators
+        eq, // ==
+        neq, // !=
+        ge, // <=
+        le, // >=
+
+        // Contexts
+        lparen,
+        rparen,
+        lcurly,
+        rcurly,
+        lbracket,
+        rbracket,
+        langle,
+        rangle,
+    };
+
     content: []const u8,
     name: ?[]const u8,
 
@@ -111,6 +111,14 @@ pub const Lexer = struct {
         return null;
     }
 
+    pub fn current_char(self: *@This()) []const u8 {
+        if (self.hare < self.content.len) {
+            return self.content[self.hare..(self.hare + 1)];
+        } else {
+            return "";
+        }
+    }
+
     pub fn next(self: *@This()) Error!?Token {
         if (self.hare >= self.content.len) {
             return null;
@@ -161,7 +169,6 @@ pub const Lexer = struct {
             },
 
             else => {
-                std.debug.print("char: {s}\n", .{self.content[self.hare..(self.hare + 1)]});
                 return Error.InvalidChar;
             },
         }
@@ -318,51 +325,51 @@ test "basic lex" {
 
     var lexer = Lexer.init(input, null);
 
-    const Case = struct { token: Token, content: []const u8 };
+    const Case = struct { token: Lexer.Token, content: []const u8 };
     const cases = [_]Case{
-        .{ .token = Token.let, .content = "let" },
-        .{ .token = Token.ident, .content = "five" },
-        .{ .token = Token.assign, .content = "=" },
-        .{ .token = Token.int, .content = "5" },
-        .{ .token = Token.semicolon, .content = ";" },
+        .{ .token = Lexer.Token.let, .content = "let" },
+        .{ .token = Lexer.Token.ident, .content = "five" },
+        .{ .token = Lexer.Token.assign, .content = "=" },
+        .{ .token = Lexer.Token.int, .content = "5" },
+        .{ .token = Lexer.Token.semicolon, .content = ";" },
 
-        .{ .token = Token.let, .content = "let" },
-        .{ .token = Token.ident, .content = "ten" },
-        .{ .token = Token.assign, .content = "=" },
-        .{ .token = Token.int, .content = "10" },
-        .{ .token = Token.semicolon, .content = ";" },
+        .{ .token = Lexer.Token.let, .content = "let" },
+        .{ .token = Lexer.Token.ident, .content = "ten" },
+        .{ .token = Lexer.Token.assign, .content = "=" },
+        .{ .token = Lexer.Token.int, .content = "10" },
+        .{ .token = Lexer.Token.semicolon, .content = ";" },
 
-        .{ .token = Token.let, .content = "let" },
-        .{ .token = Token.ident, .content = "add" },
-        .{ .token = Token.assign, .content = "=" },
-        .{ .token = Token.function, .content = "fn" },
-        .{ .token = Token.lparen, .content = "(" },
-        .{ .token = Token.ident, .content = "x" },
-        .{ .token = Token.comma, .content = "," },
-        .{ .token = Token.ident, .content = "y" },
-        .{ .token = Token.rparen, .content = ")" },
-        .{ .token = Token.lcurly, .content = "{" },
-        .{ .token = Token.ident, .content = "x" },
-        .{ .token = Token.plus, .content = "+" },
-        .{ .token = Token.ident, .content = "y" },
-        .{ .token = Token.semicolon, .content = ";" },
-        .{ .token = Token.rcurly, .content = "}" },
-        .{ .token = Token.semicolon, .content = ";" },
+        .{ .token = Lexer.Token.let, .content = "let" },
+        .{ .token = Lexer.Token.ident, .content = "add" },
+        .{ .token = Lexer.Token.assign, .content = "=" },
+        .{ .token = Lexer.Token.function, .content = "fn" },
+        .{ .token = Lexer.Token.lparen, .content = "(" },
+        .{ .token = Lexer.Token.ident, .content = "x" },
+        .{ .token = Lexer.Token.comma, .content = "," },
+        .{ .token = Lexer.Token.ident, .content = "y" },
+        .{ .token = Lexer.Token.rparen, .content = ")" },
+        .{ .token = Lexer.Token.lcurly, .content = "{" },
+        .{ .token = Lexer.Token.ident, .content = "x" },
+        .{ .token = Lexer.Token.plus, .content = "+" },
+        .{ .token = Lexer.Token.ident, .content = "y" },
+        .{ .token = Lexer.Token.semicolon, .content = ";" },
+        .{ .token = Lexer.Token.rcurly, .content = "}" },
+        .{ .token = Lexer.Token.semicolon, .content = ";" },
 
-        .{ .token = Token.let, .content = "let" },
-        .{ .token = Token.ident, .content = "result" },
-        .{ .token = Token.assign, .content = "=" },
-        .{ .token = Token.ident, .content = "add" },
-        .{ .token = Token.lparen, .content = "(" },
-        .{ .token = Token.ident, .content = "five" },
-        .{ .token = Token.comma, .content = "," },
-        .{ .token = Token.ident, .content = "ten" },
-        .{ .token = Token.rparen, .content = ")" },
-        .{ .token = Token.semicolon, .content = ";" },
+        .{ .token = Lexer.Token.let, .content = "let" },
+        .{ .token = Lexer.Token.ident, .content = "result" },
+        .{ .token = Lexer.Token.assign, .content = "=" },
+        .{ .token = Lexer.Token.ident, .content = "add" },
+        .{ .token = Lexer.Token.lparen, .content = "(" },
+        .{ .token = Lexer.Token.ident, .content = "five" },
+        .{ .token = Lexer.Token.comma, .content = "," },
+        .{ .token = Lexer.Token.ident, .content = "ten" },
+        .{ .token = Lexer.Token.rparen, .content = ")" },
+        .{ .token = Lexer.Token.semicolon, .content = ";" },
     };
 
     for (cases) |case| {
-        try std.testing.expectEqual(@as(?Token, case.token), try lexer.sig());
+        try std.testing.expectEqual(@as(?Lexer.Token, case.token), try lexer.sig());
         try std.testing.expectEqualSlices(u8, case.content, lexer.slice());
     }
 
