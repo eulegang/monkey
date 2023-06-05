@@ -57,6 +57,12 @@ pub const Lexer = struct {
         rangle,
     };
 
+    pub const Snapshot = struct {
+        pos: usize,
+        hare: usize,
+        line: usize,
+    };
+
     content: []const u8,
     name: ?[]const u8,
 
@@ -98,6 +104,20 @@ pub const Lexer = struct {
 
     pub fn slice(self: *@This()) []const u8 {
         return self.content[self.pos..self.hare];
+    }
+
+    pub fn snapshot(self: *@This()) Snapshot {
+        return Snapshot{
+            .pos = self.pos,
+            .hare = self.hare,
+            .line = self.line,
+        };
+    }
+
+    pub fn restore(self: *@This(), ss: Snapshot) void {
+        self.pos = ss.pos;
+        self.hare = ss.hare;
+        self.line = ss.line;
     }
 
     pub fn sig(self: *@This()) Error!?Token {
