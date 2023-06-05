@@ -24,6 +24,10 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
+    // Add sym library
+    const sym = b.addModule("lang", .{ .source_file = .{ .path = "../monkey-lang/src/main.zig" } });
+    lib.addModule("lang", sym);
+
     // This declares intent for the library to be installed into the standard
     // location when the user invokes the "install" step (the default step when
     // running `zig build`).

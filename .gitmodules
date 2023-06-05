@@ -1,0 +1,3 @@
+[submodule "monkey-lang/deps/sym"]
+	path = monkey-lang/deps/sym
+	url = ssh://github.com/eulegang/sym
