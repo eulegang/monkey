@@ -61,6 +61,7 @@ pub const Parser = struct {
         switch (e.*) {
             expr.Expr.number => {},
             expr.Expr.ident => {},
+            expr.Expr.boolean => {},
             expr.Expr.prefix => |prefix| {
                 self.free_expr(prefix.expr);
             },

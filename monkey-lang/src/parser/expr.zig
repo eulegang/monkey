@@ -22,18 +22,11 @@ const Precedence = enum(u8) {
             else => return Precedence.lowest,
         }
     }
-
-    fn down(self: Precedence) Precedence {
-        if (self == Precedence.lowest) {
-            return Precedence.lowest;
-        }
-
-        return @intToEnum(Precedence, @enumToInt(self) - 1);
-    }
 };
 
 pub const Expr = union(enum) {
     number: Number,
+    boolean: Bool,
     ident: Ident,
     prefix: Prefix,
     infix: Infix,
@@ -60,7 +53,12 @@ pub const Expr = union(enum) {
 
             Token.ident => {
                 var expr = try parser.alloc.create(Expr);
-                expr.* = Expr{ .ident = try Ident.parse(parser) };
+
+                if (Bool.parse(parser)) |b| {
+                    expr.* = Expr{ .boolean = b };
+                } else {
+                    expr.* = Expr{ .ident = try Ident.parse(parser) };
+                }
                 return expr;
             },
 
@@ -73,6 +71,20 @@ pub const Expr = union(enum) {
             Token.minus => {
                 var expr = try parser.alloc.create(Expr);
                 expr.* = Expr{ .prefix = try Prefix.parse(parser) };
+                return expr;
+            },
+
+            Token.lparen => {
+                try parser.next();
+                const expr = try Expr.parsePrec(parser, Precedence.lowest);
+
+                const token = parser.current() catch return Parser.Error.NotExpr;
+                if (token != Token.rparen) {
+                    return Parser.Error.NotExpr;
+                }
+
+                try parser.next();
+
                 return expr;
             },
 
@@ -117,7 +129,7 @@ pub const Expr = union(enum) {
 
             const level = Precedence.prec(p);
 
-            if (@enumToInt(prec) > @enumToInt(level)) {
+            if (@enumToInt(prec) >= @enumToInt(level)) {
                 break;
             }
 
@@ -126,34 +138,110 @@ pub const Expr = union(enum) {
 
         return lhs;
     }
+
+    pub fn format(
+        self: Expr,
+        comptime _: []const u8,
+        _: std.fmt.FormatOptions,
+        writer: anytype,
+    ) !void {
+        switch (self) {
+            .ident => |ident| try writer.print("{}", .{ident}),
+            .number => |number| try writer.print("{}", .{number}),
+            .boolean => |boolean| try writer.print("{}", .{boolean}),
+            .prefix => |prefix| try writer.print("{}", .{prefix}),
+            .infix => |infix| try writer.print("{}", .{infix}),
+        }
+    }
 };
 
 pub const Ident = struct {
     ident: usize,
 
-    pub fn parse(parser: *Parser) Parser.Error!Ident {
+    fn parse(parser: *Parser) Parser.Error!Ident {
         const ident = try parser.symbols.intern(parser.slice());
         try parser.next();
 
         return Ident{ .ident = ident };
+    }
+
+    pub fn format(
+        self: Ident,
+        comptime _: []const u8,
+        _: std.fmt.FormatOptions,
+        writer: anytype,
+    ) !void {
+        try writer.print("id[{x}]", .{self.ident});
     }
 };
 
 pub const Number = struct {
     value: u64,
 
-    pub fn parse(parser: *Parser) Parser.Error!Number {
+    fn parse(parser: *Parser) Parser.Error!Number {
         const v = std.fmt.parseInt(u64, parser.slice(), 10) catch return Parser.Error.InvalidNumber;
 
         try parser.next();
 
         return Number{ .value = v };
     }
+
+    pub fn format(
+        self: Number,
+        comptime _: []const u8,
+        _: std.fmt.FormatOptions,
+        writer: anytype,
+    ) !void {
+        try writer.print("{}", .{self.value});
+    }
+};
+
+pub const Bool = struct {
+    value: bool,
+
+    fn parse(parser: *Parser) ?Bool {
+        const cur = parser.slice();
+
+        if (std.mem.eql(u8, cur, "true")) {
+            return Bool{ .value = true };
+        }
+
+        if (std.mem.eql(u8, cur, "false")) {
+            return Bool{ .value = false };
+        }
+
+        return null;
+    }
+
+    pub fn format(
+        self: Bool,
+        comptime _: []const u8,
+        _: std.fmt.FormatOptions,
+        writer: anytype,
+    ) !void {
+        if (self.value) {
+            try writer.print("true", .{});
+        } else {
+            try writer.print("false", .{});
+        }
+    }
 };
 
 pub const PreOp = enum(u8) {
     Neg,
     Not,
+
+    pub fn format(
+        self: PreOp,
+        comptime _: []const u8,
+        _: std.fmt.FormatOptions,
+        writer: anytype,
+    ) !void {
+        switch (self) {
+            .Neg => try writer.print("-", .{}),
+            .Not => try writer.print("!", .{}),
+        }
+    }
 };
 
 pub const Prefix = struct {
@@ -175,6 +263,15 @@ pub const Prefix = struct {
             .op = op,
             .expr = e,
         };
+    }
+
+    pub fn format(
+        self: Prefix,
+        comptime _: []const u8,
+        _: std.fmt.FormatOptions,
+        writer: anytype,
+    ) !void {
+        try writer.print("({} {})", .{ self.op, self.expr });
     }
 };
 
@@ -210,9 +307,30 @@ pub const BinOp = enum(u8) {
             Token.slash => return BinOp.Div,
 
             else => {
-                std.debug.print("choked on non-binary op: {}\n", .{t});
                 return Parser.Error.NotExpr;
             },
+        }
+    }
+
+    pub fn format(
+        self: BinOp,
+        comptime _: []const u8,
+        _: std.fmt.FormatOptions,
+        writer: anytype,
+    ) !void {
+        switch (self) {
+            .Eq => try writer.print("==", .{}),
+            .Neq => try writer.print("!=", .{}),
+
+            .Lt => try writer.print("<", .{}),
+            .Gt => try writer.print(">", .{}),
+            .Le => try writer.print("<=", .{}),
+            .Ge => try writer.print(">=", .{}),
+
+            .Add => try writer.print("+", .{}),
+            .Sub => try writer.print("-", .{}),
+            .Mult => try writer.print("*", .{}),
+            .Div => try writer.print("/", .{}),
         }
     }
 };
@@ -221,126 +339,50 @@ pub const Infix = struct {
     op: BinOp,
     lhs: *Expr,
     rhs: *Expr,
+
+    pub fn format(
+        self: Infix,
+        comptime _: []const u8,
+        _: std.fmt.FormatOptions,
+        writer: anytype,
+    ) !void {
+        try writer.print("({} {} {})", .{ self.op, self.lhs, self.rhs });
+    }
 };
 
-test "prefix not" {
+test "exprs reprs" {
     const Lexer = @import("../lex.zig").Lexer;
     const Symbols = @import("sym").Symbols;
 
-    var symbols = try Symbols.init(std.testing.allocator);
-    defer symbols.deinit();
+    const Case = struct {
+        input: []const u8,
+        sexp: []const u8,
+    };
 
-    const expiremental = try symbols.intern("expiremental");
+    const cases = [_]Case{
+        .{ .input = "1 + 2", .sexp = "(+ 1 2)" },
+        .{ .input = "!expiremental", .sexp = "(! id[0])" },
+        .{ .input = "-15", .sexp = "(- 15)" },
+        .{ .input = "5 + 1", .sexp = "(+ 5 1)" },
+        .{ .input = "3 * 5 == 10 + 5", .sexp = "(== (* 3 5) (+ 10 5))" },
+        .{ .input = "1 + 2 + 3", .sexp = "(+ (+ 1 2) 3)" },
+        .{ .input = "1 + (2 + 3)", .sexp = "(+ 1 (+ 2 3))" },
+        .{ .input = "2 / (5 + 5)", .sexp = "(/ 2 (+ 5 5))" },
+        .{ .input = "(5 + 5) * 2", .sexp = "(* (+ 5 5) 2)" },
+    };
 
-    var lexer = Lexer.init("!expiremental", null);
-    var parser = try Parser.init(&symbols, std.testing.allocator, &lexer);
-    var e = try Expr.parse(&parser);
-    defer parser.free_expr(e);
+    for (cases) |case| {
+        var symbols = try Symbols.init(std.testing.allocator);
+        defer symbols.deinit();
 
-    switch (e.*) {
-        Expr.prefix => |prefix| {
-            try std.testing.expectEqual(prefix.op, PreOp.Not);
-            try std.testing.expectEqual(prefix.expr.*, Expr{ .ident = Ident{ .ident = expiremental } });
-        },
+        var lexer = Lexer.init(case.input, null);
+        var parser = try Parser.init(&symbols, std.testing.allocator, &lexer);
+        var e = try Expr.parse(&parser);
+        defer parser.free_expr(e);
 
-        else => try std.testing.expect(false),
-    }
-}
+        const sexp = try std.fmt.allocPrint(std.testing.allocator, "{}", .{e});
+        defer std.testing.allocator.free(sexp);
 
-test "prefix neg" {
-    const Lexer = @import("../lex.zig").Lexer;
-    const Symbols = @import("sym").Symbols;
-
-    var symbols = try Symbols.init(std.testing.allocator);
-    defer symbols.deinit();
-
-    var lexer = Lexer.init("-15", null);
-    var parser = try Parser.init(&symbols, std.testing.allocator, &lexer);
-    const e = try Expr.parse(&parser);
-    defer parser.free_expr(e);
-
-    switch (e.*) {
-        Expr.prefix => |prefix| {
-            try std.testing.expectEqual(prefix.op, PreOp.Neg);
-            try std.testing.expectEqual(prefix.expr.*, Expr{ .number = Number{ .value = 15 } });
-        },
-
-        else => try std.testing.expect(false),
-    }
-}
-
-test "infix add" {
-    const Lexer = @import("../lex.zig").Lexer;
-    const Symbols = @import("sym").Symbols;
-
-    var symbols = try Symbols.init(std.testing.allocator);
-    defer symbols.deinit();
-
-    var lexer = Lexer.init("5 + 1", null);
-    var parser = try Parser.init(&symbols, std.testing.allocator, &lexer);
-    var e = try Expr.parse(&parser);
-    defer parser.free_expr(e);
-
-    switch (e.*) {
-        Expr.infix => |infix| {
-            try std.testing.expectEqual(infix.op, BinOp.Add);
-            try std.testing.expectEqual(infix.lhs.*, Expr{ .number = Number{ .value = 5 } });
-            try std.testing.expectEqual(infix.rhs.*, Expr{ .number = Number{ .value = 1 } });
-        },
-
-        else => {
-            std.debug.print("found: {}\n", .{e});
-            try std.testing.expect(false);
-        },
-    }
-}
-
-test "infix cmp" {
-    const Lexer = @import("../lex.zig").Lexer;
-    const Symbols = @import("sym").Symbols;
-
-    var symbols = try Symbols.init(std.testing.allocator);
-    defer symbols.deinit();
-
-    var lexer = Lexer.init("3 * 5 == 10 + 5", null);
-    var parser = try Parser.init(&symbols, std.testing.allocator, &lexer);
-    var e = try Expr.parse(&parser);
-    defer parser.free_expr(e);
-
-    switch (e.*) {
-        Expr.infix => |infix| {
-            try std.testing.expectEqual(infix.op, BinOp.Eq);
-
-            switch (infix.lhs.*) {
-                Expr.infix => |l| {
-                    try std.testing.expectEqual(l.op, BinOp.Mult);
-                    try std.testing.expectEqual(l.lhs.*, Expr{ .number = Number{ .value = 3 } });
-                    try std.testing.expectEqual(l.rhs.*, Expr{ .number = Number{ .value = 5 } });
-                },
-
-                else => {
-                    std.debug.print("lhs found: {}\n", .{infix.lhs});
-                    try std.testing.expect(false);
-                },
-            }
-
-            switch (infix.rhs.*) {
-                Expr.infix => |r| {
-                    try std.testing.expectEqual(r.op, BinOp.Add);
-                    try std.testing.expectEqual(r.lhs.*, Expr{ .number = Number{ .value = 10 } });
-                    try std.testing.expectEqual(r.rhs.*, Expr{ .number = Number{ .value = 5 } });
-                },
-
-                else => {
-                    std.debug.print("rhs found: {}\n", .{infix.rhs});
-                    try std.testing.expect(false);
-                },
-            }
-        },
-
-        else => {
-            std.debug.print("root found: {}\n", .{e});
-            try std.testing.expect(false);
-        },
+        try std.testing.expectEqualSlices(u8, case.sexp, sexp);
     }
 }
