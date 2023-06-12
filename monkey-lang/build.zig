@@ -25,8 +25,8 @@ pub fn build(b: *std.Build) void {
     });
 
     // Add sym library
-    const sym = b.addModule("lang", .{ .source_file = .{ .path = "../monkey-lang/src/main.zig" } });
-    lib.addModule("lang", sym);
+    const sym = b.addModule("sym", .{ .source_file = .{ .path = "./deps/sym/src/main.zig" } });
+    lib.addModule("sym", sym);
 
     // This declares intent for the library to be installed into the standard
     // location when the user invokes the "install" step (the default step when
@@ -40,6 +40,7 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    main_tests.addModule("sym", sym);
 
     const run_main_tests = b.addRunArtifact(main_tests);
 

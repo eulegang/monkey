@@ -106,6 +106,10 @@ pub const Lexer = struct {
         return self.content[self.pos..self.hare];
     }
 
+    pub fn eof(self: *@This()) bool {
+        return self.hare >= self.content.len;
+    }
+
     pub fn snapshot(self: *@This()) Snapshot {
         return Snapshot{
             .pos = self.pos,
@@ -164,7 +168,7 @@ pub const Lexer = struct {
             ',' => return self.chomp(Token.comma),
 
             '+' => return self.chomp(Token.plus),
-            '-' => return self.chomp(Token.plus),
+            '-' => return self.chomp(Token.minus),
 
             '/' => return self.chomp(Token.slash),
             '*' => return self.chomp(Token.star),
