@@ -16,17 +16,28 @@ pub fn build(b: *std.Build) void {
     const optimize = b.standardOptimizeOption(.{});
 
     const exe = b.addExecutable(.{
-        .name = "monkey-lex",
+        .name = "monkey-repr",
         // In this case the main source file is merely a path, however, in more
         // complicated build scripts, this could be a generated file.
-        .root_source_file = .{ .path = "src/lex.zig" },
+        .root_source_file = .{ .path = "src/main.zig" },
         .target = target,
         .optimize = optimize,
     });
 
     // Add sym library
-    const sym = b.addModule("lang", .{ .source_file = .{ .path = "../monkey-lang/src/main.zig" } });
-    exe.addModule("lang", sym);
+    const sym = b.addModule("sym", .{
+        .source_file = .{ .path = "../monkey-lang/deps/sym/src/main.zig" },
+    });
+    //exe.addModule("sym", sym);
+
+    const lang = b.addModule("lang", .{
+        .source_file = .{ .path = "../monkey-lang/src/main.zig" },
+        .dependencies = &[_]std.Build.ModuleDependency{
+            .{ .name = "sym", .module = sym },
+        },
+    });
+
+    exe.addModule("lang", lang);
 
     // This declares intent for the executable to be installed into the
     // standard location when the user invokes the "install" step (the default
@@ -59,7 +70,7 @@ pub fn build(b: *std.Build) void {
     // Creates a step for unit testing. This only builds the test executable
     // but does not run it.
     const unit_tests = b.addTest(.{
-        .root_source_file = .{ .path = "src/lex.zig" },
+        .root_source_file = .{ .path = "src/main.zig" },
         .target = target,
         .optimize = optimize,
     });

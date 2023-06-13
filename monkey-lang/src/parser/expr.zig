@@ -53,12 +53,14 @@ pub const Expr = union(enum) {
         switch (try parser.current()) {
             .int => {
                 var expr = try parser.alloc.create(Expr);
+                errdefer parser.alloc.destroy(expr);
                 expr.* = Expr{ .number = try Number.parse(parser) };
                 return expr;
             },
 
             .ident => {
                 var expr = try parser.alloc.create(Expr);
+                errdefer parser.alloc.destroy(expr);
 
                 if (Bool.parse(parser)) |b| {
                     expr.* = Expr{ .boolean = b };
@@ -71,12 +73,14 @@ pub const Expr = union(enum) {
 
             .bang => {
                 var expr = try parser.alloc.create(Expr);
+                errdefer parser.alloc.destroy(expr);
                 expr.* = Expr{ .prefix = try Prefix.parse(parser) };
                 return expr;
             },
 
             .minus => {
                 var expr = try parser.alloc.create(Expr);
+                errdefer parser.alloc.destroy(expr);
                 expr.* = Expr{ .prefix = try Prefix.parse(parser) };
                 return expr;
             },
@@ -84,6 +88,7 @@ pub const Expr = union(enum) {
             .lparen => {
                 try parser.next();
                 const expr = try Expr.parsePrec(parser, Precedence.lowest);
+                errdefer parser.free_expr(expr);
 
                 const token = parser.current() catch return Parser.Error.NotExpr;
                 if (token != Token.rparen) {
@@ -98,6 +103,7 @@ pub const Expr = union(enum) {
             .lcurly => {
                 const blk = try Block.parse(parser);
                 var expr = try parser.alloc.create(Expr);
+                errdefer parser.alloc.destroy(expr);
                 expr.* = Expr{ .block = blk };
 
                 return expr;
@@ -107,15 +113,15 @@ pub const Expr = union(enum) {
                 const cond = try Cond.parse(parser);
 
                 var expr = try parser.alloc.create(Expr);
+                errdefer parser.alloc.destroy(expr);
                 expr.* = Expr{ .cond = cond };
                 return expr;
             },
 
             .function => {
-                const fun = try Fun.parse(parser);
-
                 var expr = try parser.alloc.create(Expr);
-                expr.* = Expr{ .fun = fun };
+                errdefer parser.alloc.destroy(expr);
+                expr.* = Expr{ .fun = try Fun.parse(parser) };
                 return expr;
             },
 
@@ -130,10 +136,13 @@ pub const Expr = union(enum) {
 
         if (token == Token.lparen) {
             var res = try parser.alloc.create(Expr);
+            errdefer parser.alloc.destroy(res);
             res.* = Expr{ .call = try FunCall.parse(parser, lhs) };
 
             return res;
         }
+
+        errdefer parser.free_expr(lhs);
 
         const prec = Precedence.prec(token);
 
@@ -399,6 +408,11 @@ pub const Block = struct {
         try parser.next();
         var s = try stmt.Stmt.parse(parser);
         var stmts = std.ArrayList(stmt.Stmt).init(parser.alloc);
+        errdefer stmts.deinit();
+
+        errdefer for (stmts.items) |item| {
+            parser.free_stmt(item);
+        };
 
         try stmts.append(s);
 
@@ -446,6 +460,7 @@ pub const Cond = struct {
         try parser.expect(Token.lcurly);
 
         var cons = try parser.alloc.create(Block);
+        errdefer parser.alloc.destroy(cons);
         cons.* = try Block.parse(parser);
 
         var alt: ?*Block = null;
@@ -454,6 +469,7 @@ pub const Cond = struct {
                 try parser.next();
 
                 alt = try parser.alloc.create(Block);
+                errdefer parser.alloc.destroy(alt.?);
                 alt.?.* = try Block.parse(parser);
             }
         } else |_| {}
@@ -503,6 +519,7 @@ pub const Fun = struct {
         }
 
         var body = try parser.alloc.create(Block);
+        errdefer parser.alloc.destroy(body);
         body.* = try Block.parse(parser);
 
         return Fun{
@@ -627,7 +644,8 @@ test "exprs reprs" {
         defer symbols.deinit();
 
         var lexer = Lexer.init(case.input, null);
-        var parser = try Parser.init(&symbols, std.testing.allocator, &lexer);
+        var parser = try Parser.init(std.testing.allocator, &lexer);
+        defer parser.deinit();
         var e = try Expr.parse(&parser);
         defer parser.free_expr(e);
 

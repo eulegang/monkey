@@ -50,6 +50,7 @@ pub const LetStmt = struct {
 
         try parser.next();
         const e = try expr.Expr.parse(parser);
+        errdefer parser.free_expr(e);
 
         if (try parser.current() != Lexer.Token.semicolon) {
             return Parser.Error.ExpectedTerminal;
@@ -79,6 +80,8 @@ pub const ReturnStmt = struct {
     pub fn parse(parser: *Parser) !ReturnStmt {
         try parser.next();
         const e = try expr.Expr.parse(parser);
+        errdefer parser.free_expr(e);
+
         if (try parser.current() != Lexer.Token.semicolon) {
             return Parser.Error.ExpectedTerminal;
         }

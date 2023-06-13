@@ -20,7 +20,11 @@ pub const Parser = struct {
     peek_slice: []const u8,
     peek: ?Lexer.Token,
 
-    pub fn init(symbols: *sym.Symbols, alloc: std.mem.Allocator, lexer: *Lexer) Error!@This() {
+    pub fn init(alloc: std.mem.Allocator, lexer: *Lexer) Error!@This() {
+        var symbols = try alloc.create(sym.Symbols);
+        symbols.* = try sym.Symbols.init(alloc);
+        errdefer alloc.destroy(symbols);
+
         const cur = try lexer.sig();
         const cur_slice = lexer.slice();
         const p = try lexer.sig();
@@ -36,6 +40,11 @@ pub const Parser = struct {
             .peek_slice = peek_slice,
             .peek = p,
         };
+    }
+
+    pub fn deinit(self: *@This()) void {
+        self.symbols.deinit();
+        self.alloc.destroy(self.symbols);
     }
 
     pub fn free(self: *@This(), prog: *Prog) void {
@@ -172,6 +181,20 @@ pub const Parser = struct {
 
     pub const Prog = struct {
         stmts: std.ArrayList(stmt.Stmt),
+
+        pub fn format(
+            self: Prog,
+            comptime _: []const u8,
+            _: std.fmt.FormatOptions,
+            writer: anytype,
+        ) !void {
+            try writer.print("(prog", .{});
+            for (self.stmts.items) |s| {
+                try writer.print(" {}", .{s});
+            }
+
+            try writer.print(")", .{});
+        }
     };
 
     pub fn format(
@@ -192,16 +215,14 @@ test "parse let" {
 
     var lexer = Lexer.init(input, null);
 
-    var symbols = try sym.Symbols.init(std.testing.allocator);
-    defer symbols.deinit();
-
-    var parser = try Parser.init(&symbols, std.testing.allocator, &lexer);
+    var parser = try Parser.init(std.testing.allocator, &lexer);
+    defer parser.deinit();
 
     var prog = try parser.parse();
     defer parser.free(&prog);
 
-    const five = try symbols.intern("five");
-    const ten = try symbols.intern("ten");
+    const five = try parser.symbols.intern("five");
+    const ten = try parser.symbols.intern("ten");
 
     try std.testing.expectEqual(prog.stmts.items[0].let.ident, five);
     try std.testing.expectEqual(prog.stmts.items[0].let.expr.*, expr.Expr{ .number = expr.Number{ .value = 5 } });
