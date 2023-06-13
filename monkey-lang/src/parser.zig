@@ -1,6 +1,5 @@
 const std = @import("std");
 const sym = @import("sym");
-//const Symbols = @import("sym").Symbols;
 
 const stmt = @import("./parser/stmt.zig");
 const expr = @import("./parser/expr.zig");
@@ -8,7 +7,7 @@ const expr = @import("./parser/expr.zig");
 const Lexer = @import("./lex.zig").Lexer;
 
 pub const Parser = struct {
-    pub const Error = error{ ExpectedStatement, InvalidNumber, NotExpr } || Lexer.Error || std.mem.Allocator.Error || sym.Error;
+    pub const Error = error{ ExpectedStatement, InvalidNumber, NotExpr, InvalidToken } || Lexer.Error || std.mem.Allocator.Error || sym.Error;
 
     symbols: *sym.Symbols,
     alloc: std.mem.Allocator,
@@ -51,24 +50,68 @@ pub const Parser = struct {
         switch (s) {
             stmt.Stmt.let => |let| self.free_expr(let.expr),
             stmt.Stmt.ret => |ret| self.free_expr(ret.expr),
-            stmt.Stmt.cond => {},
-            stmt.Stmt.loop_cond => {},
-            stmt.Stmt.loop => {},
         }
     }
 
     pub fn free_expr(self: *@This(), e: *expr.Expr) void {
         switch (e.*) {
-            expr.Expr.number => {},
-            expr.Expr.ident => {},
-            expr.Expr.boolean => {},
-            expr.Expr.prefix => |prefix| {
+            .number => {},
+            .ident => {},
+            .boolean => {},
+            .prefix => |prefix| {
                 self.free_expr(prefix.expr);
             },
 
-            expr.Expr.infix => |infix| {
+            .infix => |infix| {
                 self.free_expr(infix.lhs);
                 self.free_expr(infix.rhs);
+            },
+
+            .block => |blk| {
+                for (blk.stmts.items) |s| {
+                    self.free_stmt(s);
+                }
+
+                blk.stmts.deinit();
+            },
+
+            .cond => |cond| {
+                self.free_expr(cond.cond);
+
+                for (cond.cons.stmts.items) |s| {
+                    self.free_stmt(s);
+                }
+
+                cond.cons.stmts.deinit();
+                self.alloc.destroy(cond.cons);
+
+                if (cond.alt) |alt| {
+                    for (alt.stmts.items) |s| {
+                        self.free_stmt(s);
+                    }
+
+                    alt.stmts.deinit();
+                    self.alloc.destroy(alt);
+                }
+            },
+
+            .fun => |fun| {
+                for (fun.body.stmts.items) |s| {
+                    self.free_stmt(s);
+                }
+
+                fun.body.stmts.deinit();
+                self.alloc.destroy(fun.body);
+                fun.args.deinit();
+            },
+
+            .call => |call| {
+                self.free_expr(call.expr);
+                for (call.args.items) |sub| {
+                    self.free_expr(sub);
+                }
+
+                call.args.deinit();
             },
         }
 
@@ -92,11 +135,26 @@ pub const Parser = struct {
         self.peek_slice = self.lexer.slice();
     }
 
+    pub fn expect(self: *@This(), token: Lexer.Token) !void {
+        try self.next();
+        if (self.cur != token) {
+            return Error.InvalidToken;
+        }
+    }
+
     pub fn current(self: *@This()) !Lexer.Token {
         if (self.cur) |cur| {
             return cur;
         } else {
             return Error.EOF;
+        }
+    }
+
+    pub fn currentIs(self: *@This(), token: Lexer.Token) bool {
+        if (self.cur) |cur| {
+            return cur == token;
+        } else {
+            return false;
         }
     }
 
@@ -115,6 +173,15 @@ pub const Parser = struct {
     pub const Prog = struct {
         stmts: std.ArrayList(stmt.Stmt),
     };
+
+    pub fn format(
+        self: Parser,
+        comptime _: []const u8,
+        _: std.fmt.FormatOptions,
+        writer: anytype,
+    ) !void {
+        try writer.print("cur: {?}, peek: {?}, slice: {s}", .{ self.cur, self.peek, self.cur_slice });
+    }
 };
 
 test "parse let" {

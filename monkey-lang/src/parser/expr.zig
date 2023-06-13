@@ -2,6 +2,7 @@ const std = @import("std");
 
 const Parser = @import("../parser.zig").Parser;
 const Token = @import("../lex.zig").Lexer.Token;
+const stmt = @import("./stmt.zig");
 
 const Precedence = enum(u8) {
     lowest = 1, // None
@@ -18,6 +19,7 @@ const Precedence = enum(u8) {
             Token.rangle, Token.langle, Token.le, Token.ge => return Precedence.compare,
             Token.plus, Token.minus => return Precedence.sum,
             Token.star, Token.slash => return Precedence.product,
+            Token.lparen => return Precedence.call,
 
             else => return Precedence.lowest,
         }
@@ -30,6 +32,10 @@ pub const Expr = union(enum) {
     ident: Ident,
     prefix: Prefix,
     infix: Infix,
+    block: Block,
+    cond: Cond,
+    fun: Fun,
+    call: FunCall,
 
     pub fn parse(parser: *Parser) Parser.Error!*Expr {
         const e = Expr.parsePrec(parser, Precedence.lowest);
@@ -45,13 +51,13 @@ pub const Expr = union(enum) {
 
     fn parsePrefix(parser: *Parser) Parser.Error!*Expr {
         switch (try parser.current()) {
-            Token.int => {
+            .int => {
                 var expr = try parser.alloc.create(Expr);
                 expr.* = Expr{ .number = try Number.parse(parser) };
                 return expr;
             },
 
-            Token.ident => {
+            .ident => {
                 var expr = try parser.alloc.create(Expr);
 
                 if (Bool.parse(parser)) |b| {
@@ -59,22 +65,23 @@ pub const Expr = union(enum) {
                 } else {
                     expr.* = Expr{ .ident = try Ident.parse(parser) };
                 }
+
                 return expr;
             },
 
-            Token.bang => {
+            .bang => {
                 var expr = try parser.alloc.create(Expr);
                 expr.* = Expr{ .prefix = try Prefix.parse(parser) };
                 return expr;
             },
 
-            Token.minus => {
+            .minus => {
                 var expr = try parser.alloc.create(Expr);
                 expr.* = Expr{ .prefix = try Prefix.parse(parser) };
                 return expr;
             },
 
-            Token.lparen => {
+            .lparen => {
                 try parser.next();
                 const expr = try Expr.parsePrec(parser, Precedence.lowest);
 
@@ -88,6 +95,30 @@ pub const Expr = union(enum) {
                 return expr;
             },
 
+            .lcurly => {
+                const blk = try Block.parse(parser);
+                var expr = try parser.alloc.create(Expr);
+                expr.* = Expr{ .block = blk };
+
+                return expr;
+            },
+
+            .cond => {
+                const cond = try Cond.parse(parser);
+
+                var expr = try parser.alloc.create(Expr);
+                expr.* = Expr{ .cond = cond };
+                return expr;
+            },
+
+            .function => {
+                const fun = try Fun.parse(parser);
+
+                var expr = try parser.alloc.create(Expr);
+                expr.* = Expr{ .fun = fun };
+                return expr;
+            },
+
             else => {
                 return try Expr.parsePrec(parser, Precedence.prefix);
             },
@@ -96,6 +127,13 @@ pub const Expr = union(enum) {
 
     fn parseInfix(parser: *Parser, lhs: *Expr) Parser.Error!*Expr {
         const token = parser.current() catch return lhs;
+
+        if (token == Token.lparen) {
+            var res = try parser.alloc.create(Expr);
+            res.* = Expr{ .call = try FunCall.parse(parser, lhs) };
+
+            return res;
+        }
 
         const prec = Precedence.prec(token);
 
@@ -151,6 +189,10 @@ pub const Expr = union(enum) {
             .boolean => |boolean| try writer.print("{}", .{boolean}),
             .prefix => |prefix| try writer.print("{}", .{prefix}),
             .infix => |infix| try writer.print("{}", .{infix}),
+            .block => |blk| try writer.print("{}", .{blk}),
+            .cond => |cond| try writer.print("{}", .{cond}),
+            .fun => |fun| try writer.print("{}", .{fun}),
+            .call => |call| try writer.print("{}", .{call}),
         }
     }
 };
@@ -350,6 +392,205 @@ pub const Infix = struct {
     }
 };
 
+pub const Block = struct {
+    stmts: std.ArrayList(stmt.Stmt),
+
+    fn parse(parser: *Parser) !Block {
+        try parser.next();
+        var s = try stmt.Stmt.parse(parser);
+        var stmts = std.ArrayList(stmt.Stmt).init(parser.alloc);
+
+        try stmts.append(s);
+
+        while (true) {
+            const token = parser.current() catch return Parser.Error.NotExpr;
+
+            if (token == .rcurly) {
+                break;
+            }
+
+            s = try stmt.Stmt.parse(parser);
+            try stmts.append(s);
+        }
+
+        try parser.next();
+
+        return Block{ .stmts = stmts };
+    }
+
+    pub fn format(
+        self: Block,
+        comptime _: []const u8,
+        _: std.fmt.FormatOptions,
+        writer: anytype,
+    ) !void {
+        try writer.print("(do", .{});
+        for (self.stmts.items) |s| {
+            try writer.print(" {}", .{s});
+        }
+
+        try writer.print(")", .{});
+    }
+};
+
+pub const Cond = struct {
+    cond: *Expr,
+    cons: *Block,
+    alt: ?*Block,
+
+    fn parse(parser: *Parser) !Cond {
+        try parser.expect(Token.lparen);
+        try parser.next();
+        const cond = try Expr.parsePrec(parser, Precedence.lowest);
+        try parser.expect(Token.rparen);
+        try parser.expect(Token.lcurly);
+
+        var cons = try parser.alloc.create(Block);
+        cons.* = try Block.parse(parser);
+
+        var alt: ?*Block = null;
+        if (parser.current()) |cur| {
+            if (cur == .contra) {
+                try parser.next();
+
+                alt = try parser.alloc.create(Block);
+                alt.?.* = try Block.parse(parser);
+            }
+        } else |_| {}
+
+        return Cond{ .cond = cond, .cons = cons, .alt = alt };
+    }
+
+    pub fn format(
+        self: Cond,
+        comptime _: []const u8,
+        _: std.fmt.FormatOptions,
+        writer: anytype,
+    ) !void {
+        try writer.print("(if {} {} {?})", .{ self.cond, self.cons, self.alt });
+    }
+};
+
+pub const Fun = struct {
+    args: std.ArrayList(usize),
+    body: *Block,
+
+    fn parse(parser: *Parser) !Fun {
+        try parser.expect(.lparen);
+        try parser.expect(.ident);
+
+        var args = std.ArrayList(usize).init(parser.alloc);
+        errdefer args.deinit();
+
+        while (true) {
+            const id = try parser.symbols.intern(parser.slice());
+            try args.append(id);
+
+            try parser.next();
+
+            const token = parser.current() catch return Parser.Error.NotExpr;
+
+            if (token == .rparen) {
+                try parser.next();
+                break;
+            }
+
+            if (token != .comma) {
+                return Parser.Error.NotExpr;
+            }
+
+            try parser.next();
+        }
+
+        var body = try parser.alloc.create(Block);
+        body.* = try Block.parse(parser);
+
+        return Fun{
+            .args = args,
+            .body = body,
+        };
+    }
+
+    pub fn format(
+        self: Fun,
+        comptime _: []const u8,
+        _: std.fmt.FormatOptions,
+        writer: anytype,
+    ) !void {
+        try writer.print("(lambda (", .{});
+        if (self.args.items.len > 0) {
+            try writer.print("id[{}]", .{self.args.items[0]});
+
+            var i: usize = 1;
+            while (i < self.args.items.len) {
+                try writer.print(" id[{}]", .{self.args.items[i]});
+                i += 1;
+            }
+            try writer.print(") ", .{});
+        }
+
+        try writer.print("{}", .{self.body});
+
+        try writer.print(")", .{});
+    }
+};
+
+pub const FunCall = struct {
+    expr: *Expr,
+    args: std.ArrayList(*Expr),
+
+    fn parse(parser: *Parser, expr: *Expr) Parser.Error!FunCall {
+        var args = std.ArrayList(*Expr).init(parser.alloc);
+
+        try parser.next();
+
+        if (!parser.currentIs(Token.rparen)) {
+            while (true) {
+                try args.append(try Expr.parsePrec(parser, Precedence.lowest));
+
+                if (parser.currentIs(Token.rparen)) {
+                    break;
+                }
+
+                if (!parser.currentIs(Token.comma)) {
+                    return Parser.Error.NotExpr;
+                }
+
+                try parser.next();
+            }
+        }
+
+        try parser.next();
+
+        return FunCall{
+            .expr = expr,
+            .args = args,
+        };
+    }
+
+    pub fn format(
+        self: FunCall,
+        comptime _: []const u8,
+        _: std.fmt.FormatOptions,
+        writer: anytype,
+    ) !void {
+        try writer.print("(apply {} (", .{self.expr});
+
+        if (self.args.items.len > 0) {
+            try writer.print("{}", .{self.args.items[0]});
+
+            var i: usize = 1;
+
+            while (i < self.args.items.len) {
+                try writer.print(" {}", .{self.args.items[i]});
+                i += 1;
+            }
+        }
+
+        try writer.print("))", .{});
+    }
+};
+
 test "exprs reprs" {
     const Lexer = @import("../lex.zig").Lexer;
     const Symbols = @import("sym").Symbols;
@@ -369,6 +610,16 @@ test "exprs reprs" {
         .{ .input = "1 + (2 + 3)", .sexp = "(+ 1 (+ 2 3))" },
         .{ .input = "2 / (5 + 5)", .sexp = "(/ 2 (+ 5 5))" },
         .{ .input = "(5 + 5) * 2", .sexp = "(* (+ 5 5) 2)" },
+        .{ .input = "{let a = 5; return a + 1;}", .sexp = "(do (var id[0] 5) (ret (+ id[0] 1)))" },
+        .{ .input = "if (true) { return 1; } else { return 0; }", .sexp = "(if true (do (ret 1)) (do (ret 0)))" },
+        .{ .input = "if (true) { return 1; }", .sexp = "(if true (do (ret 1)) null)" },
+        .{ .input = "fn (x) { return x + 1; }", .sexp = "(lambda (id[0]) (do (ret (+ id[0] 1))))" },
+        .{ .input = "exit()", .sexp = "(apply id[0] ())" },
+        .{ .input = "inc(1)", .sexp = "(apply id[0] (1))" },
+        .{ .input = "add(1, 2)", .sexp = "(apply id[0] (1 2))" },
+        .{ .input = "add(1, x)", .sexp = "(apply id[0] (1 id[1]))" },
+        .{ .input = "double(add(x, 1))", .sexp = "(apply id[0] ((apply id[1] (id[2] 1))))" },
+        .{ .input = "fn(x, y) { return x + y; }(1, 2)", .sexp = "(apply (lambda (id[0] id[1]) (do (ret (+ id[0] id[1])))) (1 2))" },
     };
 
     for (cases) |case| {
