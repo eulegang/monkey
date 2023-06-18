@@ -6,6 +6,7 @@ const expr = @import("./expr.zig");
 pub const Stmt = union(enum) {
     let: LetStmt,
     ret: ReturnStmt,
+    expr: ExprStmt,
 
     pub fn parse(parser: *Parser) !Stmt {
         switch (try parser.current()) {
@@ -13,8 +14,10 @@ pub const Stmt = union(enum) {
             Lexer.Token.ret => return Stmt{ .ret = try ReturnStmt.parse(parser) },
 
             else => {
-                std.debug.print("current: {}\n", .{try parser.current()});
-                return Parser.Error.ExpectedStatement;
+                return Stmt{ .expr = try ExprStmt.parse(parser) };
+
+                //std.debug.print("current: {}\n", .{try parser.current()});
+                //return Parser.Error.ExpectedStatement;
             },
         }
     }
@@ -28,6 +31,7 @@ pub const Stmt = union(enum) {
         switch (self) {
             .let => |l| try writer.print("{}", .{l}),
             .ret => |r| try writer.print("{}", .{r}),
+            .expr => |e| try writer.print("{}", .{e}),
         }
     }
 };
@@ -101,6 +105,28 @@ pub const ReturnStmt = struct {
     }
 };
 
-pub const IfStmt = struct {};
-pub const WhileStmt = struct {};
-pub const LoopStmt = struct {};
+pub const ExprStmt = struct {
+    expr: *expr.Expr,
+
+    pub fn parse(parser: *Parser) !ExprStmt {
+        const e = try expr.Expr.parse(parser);
+        errdefer parser.free_expr(e);
+
+        if (try parser.current() != Lexer.Token.semicolon) {
+            return Parser.Error.ExpectedTerminal;
+        }
+
+        try parser.next();
+
+        return ExprStmt{ .expr = e };
+    }
+
+    pub fn format(
+        self: ExprStmt,
+        comptime _: []const u8,
+        _: std.fmt.FormatOptions,
+        writer: anytype,
+    ) !void {
+        try writer.print("(sink {})", .{self.expr});
+    }
+};

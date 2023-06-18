@@ -59,6 +59,7 @@ pub const Parser = struct {
         switch (s) {
             stmt.Stmt.let => |let| self.free_expr(let.expr),
             stmt.Stmt.ret => |ret| self.free_expr(ret.expr),
+            stmt.Stmt.expr => |e| self.free_expr(e.expr),
         }
     }
 
