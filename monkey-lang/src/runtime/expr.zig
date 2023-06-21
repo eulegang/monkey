@@ -1,19 +1,12 @@
 const std = @import("std");
-const value = @import("./value.zig");
+const Value = @import("./value.zig").Value;
 const expr = @import("../parser/expr.zig");
 const stmt = @import("../parser/stmt.zig");
 
-pub fn eval_expr(e: *expr.Expr) value.Value {
+pub fn eval_expr(e: *expr.Expr) Value {
     switch (e.*) {
-        .number => |n| {
-            return value.Value{
-                .number = value.Number{ .value = @bitCast(i64, n.value) },
-            };
-        },
-
-        .boolean => |b| {
-            return value.Value{ .boolean = value.Boolean{ .value = b.value } };
-        },
+        .number => |n| return Value.from(@bitCast(i64, n.value)),
+        .boolean => |b| return Value.from(b.value),
 
         .prefix => |p| return eval_prefix(p),
         .infix => |i| return eval_infix(i),
@@ -25,122 +18,65 @@ pub fn eval_expr(e: *expr.Expr) value.Value {
     }
 }
 
-fn eval_prefix(e: expr.Prefix) value.Value {
+fn eval_prefix(e: expr.Prefix) Value {
     switch (e.op) {
         .Not => {
-            return value.Value{
-                .boolean = value.Boolean{
-                    .value = !eval_expr(e.expr).truthy(),
-                },
-            };
+            return Value.from(!eval_expr(e.expr).truthy());
         },
 
         .Neg => {
             const val = eval_expr(e.expr);
 
             switch (val) {
-                .number => |n| {
-                    return value.Value{
-                        .number = value.Number{ .value = -n.value },
-                    };
-                },
-
-                else => {
-                    return value.Value{
-                        .nil = value.Nil{},
-                    };
-                },
+                .number => |n| return Value.from(-n.value),
+                else => return Value.from(void),
             }
         },
     }
 }
 
-fn eval_infix(e: expr.Infix) value.Value {
+fn eval_infix(e: expr.Infix) Value {
     switch (e.op) {
         .Eq => {
             const l = eval_expr(e.lhs);
             const r = eval_expr(e.rhs);
 
-            return value.Value{
-                .boolean = value.Boolean{ .value = l.eql(r) },
-            };
+            return Value.from(l.eql(r));
         },
 
         .Neq => {
             const l = eval_expr(e.lhs);
             const r = eval_expr(e.rhs);
 
-            return value.Value{
-                .boolean = value.Boolean{ .value = !l.eql(r) },
-            };
+            return Value.from(!l.eql(r));
         },
 
         .Lt => {
-            const l = eval_expr(e.lhs);
-            if (l.type_tag() != value.Type.number) {
-                return value.Value{ .nil = value.Nil{} };
-            }
+            const lhs = eval_expr(e.lhs).integer() orelse return Value.from(void);
+            const rhs = eval_expr(e.rhs).integer() orelse return Value.from(void);
 
-            const r = eval_expr(e.rhs);
-            if (r.type_tag() != value.Type.number) {
-                return value.Value{ .nil = value.Nil{} };
-            }
-
-            const lhs = l.number.value;
-            const rhs = r.number.value;
-
-            return value.Value{ .boolean = value.Boolean{ .value = lhs < rhs } };
+            return Value.from(lhs < rhs);
         },
 
         .Gt => {
-            const l = eval_expr(e.lhs);
-            if (l.type_tag() != value.Type.number) {
-                return value.Value{ .nil = value.Nil{} };
-            }
+            const lhs = eval_expr(e.lhs).integer() orelse return Value.from(void);
+            const rhs = eval_expr(e.rhs).integer() orelse return Value.from(void);
 
-            const r = eval_expr(e.rhs);
-            if (r.type_tag() != value.Type.number) {
-                return value.Value{ .nil = value.Nil{} };
-            }
-
-            const lhs = l.number.value;
-            const rhs = r.number.value;
-
-            return value.Value{ .boolean = value.Boolean{ .value = lhs > rhs } };
+            return Value.from(lhs > rhs);
         },
 
         .Le => {
-            const l = eval_expr(e.lhs);
-            if (l.type_tag() != value.Type.number) {
-                return value.Value{ .nil = value.Nil{} };
-            }
+            const lhs = eval_expr(e.lhs).integer() orelse return Value.from(void);
+            const rhs = eval_expr(e.rhs).integer() orelse return Value.from(void);
 
-            const r = eval_expr(e.rhs);
-            if (r.type_tag() != value.Type.number) {
-                return value.Value{ .nil = value.Nil{} };
-            }
-
-            const lhs = l.number.value;
-            const rhs = r.number.value;
-
-            return value.Value{ .boolean = value.Boolean{ .value = lhs <= rhs } };
+            return Value.from(lhs <= rhs);
         },
 
         .Ge => {
-            const l = eval_expr(e.lhs);
-            if (l.type_tag() != value.Type.number) {
-                return value.Value{ .nil = value.Nil{} };
-            }
+            const lhs = eval_expr(e.lhs).integer() orelse return Value.from(void);
+            const rhs = eval_expr(e.rhs).integer() orelse return Value.from(void);
 
-            const r = eval_expr(e.rhs);
-            if (r.type_tag() != value.Type.number) {
-                return value.Value{ .nil = value.Nil{} };
-            }
-
-            const lhs = l.number.value;
-            const rhs = r.number.value;
-
-            return value.Value{ .boolean = value.Boolean{ .value = lhs >= rhs } };
+            return Value.from(lhs >= rhs);
         },
 
         .Add => { // cheeky reference to a homomorphic type category
@@ -148,82 +84,40 @@ fn eval_infix(e: expr.Infix) value.Value {
             const re = eval_expr(e.rhs);
 
             if (le.type_tag() != re.type_tag()) {
-                return value.Value{ .nil = value.Nil{} };
+                return Value.from(void);
             }
 
             switch (le) {
-                .number => |l| {
-                    const r = re.number;
-
-                    return value.Value{ .number = value.Number{ .value = l.value + r.value } };
-                },
-
-                .boolean => |l| {
-                    const r = re.boolean;
-
-                    return value.Value{ .boolean = value.Boolean{ .value = l.value or r.value } };
-                },
-
-                .nil => {
-                    return value.Value{ .nil = value.Nil{} };
-                },
+                .number => |l| return Value.from(l.value + re.number.value),
+                .boolean => |l| return Value.from(l.value or re.boolean.value),
+                .nil => return Value.from(void),
             }
         },
 
         .Sub => {
-            const l = eval_expr(e.lhs);
-            if (l.type_tag() != value.Type.number) {
-                return value.Value{ .nil = value.Nil{} };
-            }
+            const lhs = eval_expr(e.lhs).integer() orelse return Value.from(void);
+            const rhs = eval_expr(e.rhs).integer() orelse return Value.from(void);
 
-            const r = eval_expr(e.rhs);
-            if (r.type_tag() != value.Type.number) {
-                return value.Value{ .nil = value.Nil{} };
-            }
-
-            const lhs = l.number.value;
-            const rhs = r.number.value;
-
-            return value.Value{ .number = value.Number{ .value = lhs - rhs } };
+            return Value.from(lhs - rhs);
         },
 
         .Mult => {
-            const l = eval_expr(e.lhs);
-            if (l.type_tag() != value.Type.number) {
-                return value.Value{ .nil = value.Nil{} };
-            }
+            const lhs = eval_expr(e.lhs).integer() orelse return Value.from(void);
+            const rhs = eval_expr(e.rhs).integer() orelse return Value.from(void);
 
-            const r = eval_expr(e.rhs);
-            if (r.type_tag() != value.Type.number) {
-                return value.Value{ .nil = value.Nil{} };
-            }
-
-            const lhs = l.number.value;
-            const rhs = r.number.value;
-
-            return value.Value{ .number = value.Number{ .value = lhs * rhs } };
+            return Value.from(lhs * rhs);
         },
 
         .Div => {
-            const l = eval_expr(e.lhs);
-            if (l.type_tag() != value.Type.number) {
-                return value.Value{ .nil = value.Nil{} };
-            }
+            const lhs = eval_expr(e.lhs).integer() orelse return Value.from(void);
+            const rhs = eval_expr(e.rhs).integer() orelse return Value.from(void);
 
-            const r = eval_expr(e.rhs);
-            if (r.type_tag() != value.Type.number) {
-                return value.Value{ .nil = value.Nil{} };
-            }
-
-            const lhs = l.number.value;
-            const rhs = r.number.value;
-
-            return value.Value{ .number = value.Number{ .value = @divTrunc(lhs, rhs) } };
+            return Value.from(@divTrunc(lhs, rhs));
         },
     }
 }
 
-fn eval_cond(e: expr.Cond) value.Value {
+fn eval_cond(e: expr.Cond) Value {
     const cond = eval_expr(e.cond);
 
     if (cond.truthy()) {
@@ -232,13 +126,13 @@ fn eval_cond(e: expr.Cond) value.Value {
         if (e.alt) |alt| {
             return eval_blk(alt);
         } else {
-            return value.Value{ .nil = value.Nil{} };
+            return Value.from(void);
         }
     }
 }
 
-fn eval_blk(e: *expr.Block) value.Value {
-    var val: value.Value = value.Value{ .nil = value.Nil{} };
+fn eval_blk(e: *expr.Block) Value {
+    var val: Value = Value.from(void);
     for (e.stmts.items) |item| {
         val = eval_stmt(item);
     }
@@ -246,7 +140,7 @@ fn eval_blk(e: *expr.Block) value.Value {
     return val;
 }
 
-fn eval_stmt(s: stmt.Stmt) value.Value {
+fn eval_stmt(s: stmt.Stmt) Value {
     _ = s;
     unreachable;
 }

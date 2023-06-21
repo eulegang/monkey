@@ -11,6 +11,22 @@ pub const Value = union(Type) {
     number: Number,
     nil: Nil,
 
+    pub fn from(t: anytype) Value {
+        if (@TypeOf(t) == bool) {
+            return Value{ .boolean = Boolean{ .value = t } };
+        }
+
+        if (@TypeOf(t) == i64) {
+            return Value{ .number = Number{ .value = t } };
+        }
+
+        if (@TypeOf(t) == void or t == void) {
+            return Value{ .nil = Nil{} };
+        }
+
+        @compileError("invalid type to lift into value " ++ @typeName(t));
+    }
+
     pub fn type_tag(self: Value) Type {
         return @as(Type, self);
     }
@@ -31,10 +47,17 @@ pub const Value = union(Type) {
         }
     }
 
-    pub fn number(self: Value) ?Number {
+    pub fn integer(self: Value) ?i64 {
         switch (self) {
-            .number => |x| return x,
-            else => {},
+            .number => |x| return x.value,
+            else => return null,
+        }
+    }
+
+    pub fn boolean(self: Value) ?bool {
+        switch (self) {
+            .boolean => |x| return x.value,
+            else => return null,
         }
     }
 
