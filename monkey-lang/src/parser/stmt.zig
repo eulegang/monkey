@@ -112,11 +112,9 @@ pub const ExprStmt = struct {
         const e = try expr.Expr.parse(parser);
         errdefer parser.free_expr(e);
 
-        if (try parser.current() != Lexer.Token.semicolon) {
-            return Parser.Error.ExpectedTerminal;
+        if (try parser.current() == Lexer.Token.semicolon) {
+            try parser.next();
         }
-
-        try parser.next();
 
         return ExprStmt{ .expr = e };
     }

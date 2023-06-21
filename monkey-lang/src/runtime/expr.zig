@@ -141,6 +141,9 @@ fn eval_blk(e: *expr.Block) Value {
 }
 
 fn eval_stmt(s: stmt.Stmt) Value {
-    _ = s;
-    unreachable;
+    switch (s) {
+        .let => return Value.from(void),
+        .ret => |ret| return eval_expr(ret.expr),
+        .expr => |e| return eval_expr(e.expr),
+    }
 }

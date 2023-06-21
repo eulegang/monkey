@@ -1,9 +1,9 @@
 pub const std = @import("std");
 
-pub const Type = enum {
-    boolean,
-    number,
-    nil,
+pub const Type = enum(u8) {
+    nil = 0x00,
+    boolean = 0x01,
+    number = 0x02,
 };
 
 pub const Value = union(Type) {
