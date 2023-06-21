@@ -1,128 +1,99 @@
 pub const std = @import("std");
 
-pub const Type = enum(u8) {
-    nil = 0x00,
-    boolean = 0x01,
-    number = 0x02,
+const Type = enum(u4) {
+    nil,
+    boolean,
+    number,
 };
 
-pub const Value = union(Type) {
-    boolean: Boolean,
-    number: Number,
-    nil: Nil,
+const Val = union(Type) {
+    nil: void,
+    boolean: bool,
+    number: i64,
+};
+
+const Ctx = enum(u4) {
+    std,
+    ret,
+};
+
+pub const Value = struct {
+    ctx: Ctx,
+    val: Val,
 
     pub fn from(t: anytype) Value {
         if (@TypeOf(t) == bool) {
-            return Value{ .boolean = Boolean{ .value = t } };
+            return Value{
+                .ctx = .std,
+                .val = Val{ .boolean = t },
+            };
         }
 
         if (@TypeOf(t) == i64) {
-            return Value{ .number = Number{ .value = t } };
+            return Value{
+                .ctx = .std,
+                .val = Val{ .number = t },
+            };
         }
 
         if (@TypeOf(t) == void or t == void) {
-            return Value{ .nil = Nil{} };
+            return Value{
+                .ctx = .std,
+                .val = Val.nil,
+            };
         }
 
         @compileError("invalid type to lift into value " ++ @typeName(t));
     }
 
-    pub fn type_tag(self: Value) Type {
-        return @as(Type, self);
+    pub fn ret(self: Value) Value {
+        return Value{
+            .ctx = .ret,
+            .val = self.val,
+        };
     }
 
-    pub fn repr(self: Value, alloc: std.mem.Allocator) ![]const u8 {
-        switch (self) {
-            .boolean => |b| return b.repr(alloc),
-            .number => |n| return n.repr(alloc),
-            .nil => |n| return n.repr(alloc),
-        }
+    pub fn is_ret(self: Value) bool {
+        return self.ctx == .ret;
     }
 
     pub fn truthy(self: Value) bool {
-        switch (self) {
-            .boolean => |x| return x.truthy(),
-            .number => |x| return x.truthy(),
-            .nil => |x| return x.truthy(),
+        switch (self.val) {
+            .nil => return false,
+            .boolean => |b| return b,
+            .number => |n| return n != 0,
+        }
+    }
+
+    pub fn repr(self: Value, alloc: std.mem.Allocator) ![]const u8 {
+        switch (self.val) {
+            .nil => return try std.fmt.allocPrint(alloc, "null", .{}),
+            .boolean => |b| return try std.fmt.allocPrint(alloc, "{}", .{b}),
+            .number => |n| return try std.fmt.allocPrint(alloc, "{}", .{n}),
         }
     }
 
     pub fn integer(self: Value) ?i64 {
-        switch (self) {
-            .number => |x| return x.value,
-            else => return null,
-        }
-    }
-
-    pub fn boolean(self: Value) ?bool {
-        switch (self) {
-            .boolean => |x| return x.value,
+        switch (self.val) {
+            .number => |n| return n,
             else => return null,
         }
     }
 
     pub fn eql(self: Value, other: Value) bool {
-        if (self.type_tag() != other.type_tag()) {
+        if (!self.closed(other)) {
             return false;
         }
 
-        switch (self) {
-            .boolean => |b| {
-                return b.eql(other.boolean);
-            },
-            .number => |n| {
-                return n.eql(other.number);
-            },
-            .nil => |_| {
-                return true;
-            },
-        }
-    }
-};
-
-pub const Boolean = struct {
-    value: bool,
-
-    fn repr(self: Boolean, alloc: std.mem.Allocator) ![]const u8 {
-        if (self.value) {
-            return try std.fmt.allocPrint(alloc, "true", .{});
-        } else {
-            return try std.fmt.allocPrint(alloc, "false", .{});
+        switch (self.val) {
+            .nil => return true,
+            .boolean => |b| return b == other.val.boolean,
+            .number => |n| return n == other.val.number,
         }
     }
 
-    fn truthy(self: Boolean) bool {
-        return self.value;
-    }
-
-    fn eql(self: Boolean, other: Boolean) bool {
-        return self.value == other.value;
-    }
-};
-
-pub const Number = struct {
-    value: i64,
-
-    fn repr(self: Number, alloc: std.mem.Allocator) ![]const u8 {
-        return try std.fmt.allocPrint(alloc, "{}", .{self.value});
-    }
-
-    fn truthy(self: Number) bool {
-        return self.value != 0;
-    }
-
-    fn eql(self: Number, other: Number) bool {
-        return self.value == other.value;
-    }
-};
-
-pub const Nil = struct {
-    fn repr(_: Nil, alloc: std.mem.Allocator) ![]const u8 {
-        return try std.fmt.allocPrint(alloc, "null", .{});
-    }
-
-    fn truthy(_: Nil) bool {
-        return false;
+    pub fn closed(self: Value, other: Value) bool {
+        return @as(Type, self.val) == @as(Type, other.val);
     }
 };
 
@@ -130,10 +101,10 @@ test "reprs" {
     const Case = struct { value: Value, repr: []const u8 };
 
     const cases = [_]Case{
-        .{ .value = Value{ .nil = Nil{} }, .repr = "null" },
-        .{ .value = Value{ .boolean = Boolean{ .value = true } }, .repr = "true" },
-        .{ .value = Value{ .boolean = Boolean{ .value = false } }, .repr = "false" },
-        .{ .value = Value{ .number = Number{ .value = 42 } }, .repr = "42" },
+        .{ .value = Value.from(void), .repr = "null" },
+        .{ .value = Value.from(true), .repr = "true" },
+        .{ .value = Value.from(false), .repr = "false" },
+        .{ .value = Value.from(@as(i64, 42)), .repr = "42" },
     };
 
     for (cases) |case| {

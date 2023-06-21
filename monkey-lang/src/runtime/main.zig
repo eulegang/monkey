@@ -55,7 +55,7 @@ test "basic expr eval" {
         .{ .input = "6 / 3", .repr = "2" },
 
         .{ .input = "if (true) { 10 } else { 15 }", .repr = "10" },
-        .{ .input = "if (false) { 10 } else { 15 }", .repr = "15" },
+        .{ .input = "if (false) { 10 } else { return 12; 15 }", .repr = "12" },
     };
 
     for (cases) |case| {

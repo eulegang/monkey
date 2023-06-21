@@ -25,12 +25,8 @@ fn eval_prefix(e: expr.Prefix) Value {
         },
 
         .Neg => {
-            const val = eval_expr(e.expr);
-
-            switch (val) {
-                .number => |n| return Value.from(-n.value),
-                else => return Value.from(void),
-            }
+            const val = eval_expr(e.expr).integer() orelse return Value.from(void);
+            return Value.from(-val);
         },
     }
 }
@@ -79,19 +75,11 @@ fn eval_infix(e: expr.Infix) Value {
             return Value.from(lhs >= rhs);
         },
 
-        .Add => { // cheeky reference to a homomorphic type category
-            const le = eval_expr(e.lhs);
-            const re = eval_expr(e.rhs);
+        .Add => {
+            const lhs = eval_expr(e.lhs).integer() orelse return Value.from(void);
+            const rhs = eval_expr(e.rhs).integer() orelse return Value.from(void);
 
-            if (le.type_tag() != re.type_tag()) {
-                return Value.from(void);
-            }
-
-            switch (le) {
-                .number => |l| return Value.from(l.value + re.number.value),
-                .boolean => |l| return Value.from(l.value or re.boolean.value),
-                .nil => return Value.from(void),
-            }
+            return Value.from(lhs + rhs);
         },
 
         .Sub => {
@@ -135,6 +123,9 @@ fn eval_blk(e: *expr.Block) Value {
     var val: Value = Value.from(void);
     for (e.stmts.items) |item| {
         val = eval_stmt(item);
+        if (val.is_ret()) {
+            return val;
+        }
     }
 
     return val;
@@ -143,7 +134,7 @@ fn eval_blk(e: *expr.Block) Value {
 fn eval_stmt(s: stmt.Stmt) Value {
     switch (s) {
         .let => return Value.from(void),
-        .ret => |ret| return eval_expr(ret.expr),
+        .ret => |ret| return eval_expr(ret.expr).ret(),
         .expr => |e| return eval_expr(e.expr),
     }
 }
