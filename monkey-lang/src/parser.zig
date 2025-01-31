@@ -7,7 +7,7 @@ const expr = @import("./parser/expr.zig");
 const Lexer = @import("./lex.zig").Lexer;
 
 pub const Parser = struct {
-    pub const Error = error{ ExpectedStatement, InvalidNumber, NotExpr, InvalidToken } || Lexer.Error || std.mem.Allocator.Error || sym.Error;
+    pub const Error = error{ ExpectedStatement, ExpectedIdent, ExpectedAssign, ExpectedTerminal, InvalidNumber, NotExpr, InvalidToken, EOF } || Lexer.Error || std.mem.Allocator.Error || sym.Error;
 
     symbols: *sym.Symbols,
     alloc: std.mem.Allocator,
@@ -21,7 +21,7 @@ pub const Parser = struct {
     peek: ?Lexer.Token,
 
     pub fn init(alloc: std.mem.Allocator, lexer: *Lexer) Error!@This() {
-        var symbols = try alloc.create(sym.Symbols);
+        const symbols = try alloc.create(sym.Symbols);
         symbols.* = try sym.Symbols.init(alloc);
         errdefer alloc.destroy(symbols);
 

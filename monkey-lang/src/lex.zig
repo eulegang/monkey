@@ -272,7 +272,7 @@ pub const Lexer = struct {
             return false;
         }
 
-        var hare = self.pos + keyword.len;
+        const hare = self.pos + keyword.len;
 
         if (!std.mem.eql(u8, self.content[self.pos..hare], keyword)) {
             return false;

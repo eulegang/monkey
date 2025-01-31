@@ -65,7 +65,7 @@ test "basic expr eval" {
         var lexer = Lexer.init(case.input, null);
         var parser = try Parser.init(std.testing.allocator, &lexer);
         defer parser.deinit();
-        var e = try expr.Expr.parse(&parser);
+        const e = try expr.Expr.parse(&parser);
         defer parser.free_expr(e);
 
         const val = Evaluator.eval_expr(e);

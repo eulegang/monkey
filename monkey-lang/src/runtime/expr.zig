@@ -5,7 +5,7 @@ const stmt = @import("../parser/stmt.zig");
 
 pub fn eval_expr(e: *expr.Expr) Value {
     switch (e.*) {
-        .number => |n| return Value.from(@bitCast(i64, n.value)),
+        .number => |n| return Value.from(@as(i64, @bitCast(n.value))),
         .boolean => |b| return Value.from(b.value),
 
         .prefix => |p| return eval_prefix(p),
