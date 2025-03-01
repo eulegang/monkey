@@ -25,8 +25,8 @@ pub fn build(b: *std.Build) void {
     });
 
     // Add sym library
-    const sym = b.addModule("sym", .{ .root_source_file = b.path("./deps/sym/src/main.zig") });
-    lib.root_module.addImport("sym", sym);
+    const sym = b.dependency("sym", .{});
+    lib.root_module.addImport("sym", sym.module("sym"));
 
     // This declares intent for the library to be installed into the standard
     // location when the user invokes the "install" step (the default step when
@@ -40,7 +40,7 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
-    main_tests.root_module.addImport("sym", sym);
+    main_tests.root_module.addImport("sym", sym.module("sym"));
 
     const run_main_tests = b.addRunArtifact(main_tests);
 

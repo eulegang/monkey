@@ -1,0 +1,15 @@
+.{
+    .name = "monkey",
+    .version = "0.0.0",
+    .dependencies = .{
+        .sym = .{
+            .url = "git+https://github.com/eulegang/sym/?ref=HEAD#4327975b59a2ea218115e13dcc4e2299019e2427",
+            .hash = "1220b65e5801cb7cdfc2631830cc451e4ab5ed2f82fafa0e5f95235cc00bb3a1537f",
+        },
+    },
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "src",
+    },
+}
