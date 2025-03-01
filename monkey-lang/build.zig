@@ -15,8 +15,8 @@ pub fn build(b: *std.Build) void {
     // set a preferred release mode, allowing the user to decide how to optimize.
     const optimize = b.standardOptimizeOption(.{});
 
-    const lib = b.addStaticLibrary(.{
-        .name = "monkey-lang",
+    const lib = b.addModule("monkey-lang", .{
+        //.name = "monkey-lang",
         // In this case the main source file is merely a path, however, in more
         // complicated build scripts, this could be a generated file.
         .root_source_file = b.path("src/main.zig"),
@@ -24,14 +24,25 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
+    const exe = b.addExecutable(.{
+        .name = "monkey-repr",
+        // In this case the main source file is merely a path, however, in more
+        // complicated build scripts, this could be a generated file.
+        .root_source_file = b.path("src/utils/main.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
     // Add sym library
     const sym = b.dependency("sym", .{});
-    lib.root_module.addImport("sym", sym.module("sym"));
+    lib.addImport("sym", sym.module("sym"));
+    exe.root_module.addImport("lang", lib);
 
     // This declares intent for the library to be installed into the standard
     // location when the user invokes the "install" step (the default step when
     // running `zig build`).
-    b.installArtifact(lib);
+    //b.installArtifact(lib);
+    b.installArtifact(exe);
 
     // Creates a step for unit testing. This only builds the test executable
     // but does not run it.
